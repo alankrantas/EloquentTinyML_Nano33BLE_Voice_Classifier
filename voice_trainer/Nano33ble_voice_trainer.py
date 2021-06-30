@@ -1,5 +1,6 @@
 '''
-Voice trainer for Arduino Nano 33 BLE Sense and Tensorflow Lite by Alan Wang
+EloquentTinyML voice trainer v1.1 for Arduino Nano 33 BLE Sense
+  by Alan Wang
 
 Required packages:
   Tensorflow 2.x
@@ -8,7 +9,6 @@ Required packages:
   matplotlib
   scikit-learn
 '''
-
 
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # only print out fatal log
@@ -47,7 +47,24 @@ data_train, data_validate, target_train, target_validate = train_test_split(
     data_train, target_train, test_size=0.25, random_state=RANDOM_SEED)
 
 
-# create a TF RNN model
+
+# callbacks for the TF model (save best model and log)
+
+checkpoint_file = 'voice_classifier'
+log_file = 'voice_classifier_log'
+
+tf_callback = [
+    tf.keras.callbacks.ModelCheckpoint(
+        filepath=checkpoint_file,
+        save_weights_only=True,
+        monitor='accuracy',
+        mode='max',
+        save_best_only=True),
+    tf.keras.callbacks.TensorBoard(log_file)
+]
+
+
+# create a TF model
 
 model = Sequential()
 model.add(layers.Dense(data.shape[1], activation='relu', input_shape=(data.shape[1],)))
@@ -56,18 +73,24 @@ model.add(layers.Dense(np.unique(target).size * 4, activation='relu'))
 model.add(layers.Dropout(0.25))
 model.add(layers.Dense(np.unique(target).size, activation='softmax'))
 
-model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+model.compile(optimizer='adam',
+              loss='sparse_categorical_crossentropy',
+              metrics=['accuracy'])
 model.summary()
 
 
 # training TF model
 
-ITERATION = 2000
+ITERATION = 3000
 BATCH_SIZE = 4
 
-history = model.fit(data_train, target_train, epochs=ITERATION, batch_size=BATCH_SIZE,
-                    validation_data=(data_validate, target_validate))
-predictions = model.predict(data_test)
+history = model.fit(data_train, target_train,
+                    epochs=ITERATION, batch_size=BATCH_SIZE,
+                    validation_data=(data_validate, target_validate),
+                    callbacks=tf_callback)
+
+model.load_weights(checkpoint_file)  # load best model
+predictions = model.predict(data_test)  # make predictions
 test_score = model.evaluate(data_test, target_test)
 
 
